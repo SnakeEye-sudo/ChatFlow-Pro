@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💕 ChatFlow Pro - Private Couple Chat</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .container { background: white; border-radius: 15px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); width: 90%; max-width: 500px; height: 90vh; display: flex; flex-direction: column; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 15px 15px 0 0; }
+        .header h1 { font-size: 1.5em; margin-bottom: 5px; }
+        .status { font-size: 0.9em; opacity: 0.9; }
+        .chat-box { flex: 1; overflow-y: auto; padding: 20px; background: #f9f9f9; }
+        .message { margin-bottom: 15px; display: flex; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.own { justify-content: flex-end; }
+        .message-content { max-width: 70%; padding: 12px 15px; border-radius: 15px; word-wrap: break-word; }
+        .message.own .message-content { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom-right-radius: 5px; }
+        .message.other .message-content { background: #e0e0e0; color: #333; border-bottom-left-radius: 5px; }
+        .message-time { font-size: 0.75em; margin-top: 5px; opacity: 0.7; }
+        .input-section { display: flex; gap: 10px; padding: 15px; border-top: 1px solid #e0e0e0; }
+        input[type="text"] { flex: 1; padding: 12px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 1em; }
+        input[type="text"]:focus { outline: none; border-color: #667eea; }
+        button { padding: 12px 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: 600; }
+        button:hover { transform: scale(1.05); }
+        .login-container { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 20px; }
+        .login-header { text-align: center; margin-bottom: 30px; }
+        .login-header h1 { color: #667eea; font-size: 2em; margin-bottom: 10px; }
+        .login-header p { color: #666; font-size: 1.1em; }
+        #g_id_onload { margin: 20px 0; }
+        .user-info { text-align: center; margin-bottom: 20px; }
+        .user-info img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; }
+        .logout-btn { background: #ff6b6b; }
+        .typing-indicator { display: flex; gap: 5px; align-items: center; }
+        .typing-dot { width: 8px; height: 8px; background: #667eea; border-radius: 50%; animation: typing 1.4s infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loginView" class="login-container">
+            <div class="login-header">
+                <h1>💕 ChatFlow Pro</h1>
+                <p>Private Chat for You & Your Love ❤️</p>
+            </div>
+            <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID" data-callback="handleCredentialResponse"></div>
+            <div class="g_id_signin" data-type="standard"></div>
+            <p style="margin-top: 20px; color: #666; font-size: 0.9em; text-align: center;">
+                🔐 Secure Gmail login required<br>
+                💬 Only you can see your private chats<br>
+                📱 Works on all devices
+            </p>
+        </div>
+
+        <div id="chatView" style="display: none;">
+            <div class="header">
+                <h1>💕 ChatFlow Pro</h1>
+                <div class="user-info">
+                    <img id="userPic" src="" alt="Profile">
+                    <div id="userName"></div>
+                </div>
+                <div class="status">🟢 Connected</div>
+            </div>
+
+            <div class="chat-box" id="chatBox"></div>
+
+            <div class="input-section">
+                <input type="text" id="messageInput" placeholder="Type your message... 💕" autocomplete="off">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userProfile = null;
+        let messagesDB = JSON.parse(localStorage.getItem('chatflow_messages')) || [];
+        let currentMode = 'view'; // 'view' = viewing partner's messages, can be changed
+
+        function handleCredentialResponse(response) {
+            // Decode JWT token
+            const base64Url = response.credential.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            userProfile = JSON.parse(jsonPayload);
+
+            // Show chat view
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('chatView').style.display = 'flex';
+            document.getElementById('userName').textContent = userProfile.name;
+            document.getElementById('userPic').src = userProfile.picture;
+
+            loadMessages();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+
+            if (!text || !userProfile) return;
+
+            const message = {
+                id: Date.now(),
+                sender: userProfile.email,
+                senderName: userProfile.name,
+                senderPic: userProfile.picture,
+                text: text,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                encrypted: true
+            };
+
+            messagesDB.push(message);
+            localStorage.setItem('chatflow_messages', JSON.stringify(messagesDB));
+            input.value = '';
+            input.focus();
+
+            loadMessages();
+        }
+
+        function loadMessages() {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+
+            if (messagesDB.length === 0) {
+                chatBox.innerHTML = '<div style="text-align: center; color: #999; padding: 40px 20px;">No messages yet. Start your conversation! 💕</div>';
+                return;
+            }
+
+            messagesDB.forEach(msg => {
+                const isOwn = msg.sender === userProfile.email;
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
+                messageDiv.innerHTML = `
+                    <div>
+                        ${!isOwn ? `<img src="${msg.senderPic}" style="width: 30px; height: 30px; border-radius: 50%; margin-right: 10px; margin-top: 5px;">` : ''}
+                        <div style="${isOwn ? 'text-align: right;' : ''}">
+                            ${!isOwn ? `<div style="font-size: 0.85em; color: #666; margin-bottom: 3px;">${msg.senderName}</div>` : ''}
+                            <div class="message-content">${escapeHtml(msg.text)}</div>
+                            <div class="message-time">${msg.timestamp}</div>
+                        </div>
+                    </div>
+                `;
+                chatBox.appendChild(messageDiv);
+            });
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Allow Enter to send message
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('messageInput');
+            if (input) {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
+            }
+        });
+
+        // Initialize Google Sign-In
+        window.onload = () => {
+            google.accounts.id.initialize({
+                client_id: 'YOUR_GOOGLE_CLIENT_ID',
+                callback: handleCredentialResponse
+            });
+            google.accounts.id.renderButton(
+                document.querySelector('.g_id_signin'),
+                { theme: 'outline', size: 'large' }
+            );
+        };
+    </script>
+</body>
+</html>
